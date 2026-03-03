@@ -1,50 +1,64 @@
+import os
+
+import psycopg2
+import psycopg2.extras
 import uvicorn
-import sqlite3
 from fastapi import FastAPI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
-DB_PATH = "data.db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
         """
         CREATE TABLE IF NOT EXISTS items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             key TEXT NOT NULL,
             value TEXT NOT NULL
         )
         """
     )
     conn.commit()
+    cur.close()
     conn.close()
 
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 init_db()
+
 
 @app.get("/api/dados")
 def read_dados():
     conn = get_db()
-    rows = conn.execute("SELECT * FROM items").fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM items")
+    rows = cur.fetchall()
+    cur.close()
     conn.close()
-    return {"items": [dict(row) for row in rows]}
+    return {"items": rows}
 
 
 @app.post("/api/dados")
 def create_dados(data: dict):
     conn = get_db()
+    cur = conn.cursor()
     for key, value in data.items():
-        conn.execute(
-            "INSERT INTO items (key, value) VALUES (?, ?)",
+        cur.execute(
+            "INSERT INTO items (key, value) VALUES (%s, %s)",
             (str(key), str(value)),
         )
     conn.commit()
+    cur.close()
     conn.close()
     return {"message": "Dados salvos com sucesso", "data": data}
 
