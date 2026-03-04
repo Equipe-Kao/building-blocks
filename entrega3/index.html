@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitor de Umidade do Solo</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="background-orbs">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <div class="dashboard">
+      <header class="header glass-panel">
+        <div class="header-info">
+          <h1><i class="fa-solid fa-seedling"></i> Monitor de Umidade</h1>
+          <p>Monitoramento dinâmico em tempo real de sensores IoT</p>
+        </div>
+        <div class="device-status">
+          <div class="device-badge">
+            <i class="fa-solid fa-microchip"></i>
+            <span id="deviceId">Carregando...</span>
+          </div>
+          <div class="connection-pill">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Conectando...</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="grid-layout">
+        <div class="values-column">
+          <div class="metric-card glass-panel" id="cardMoisture">
+            <div class="metric-header">
+              <h3>Umidade Relativa</h3>
+              <div class="icon-wrap percent-icon">
+                <i class="fa-solid fa-droplet"></i>
+              </div>
+            </div>
+            <div class="metric-body">
+              <div class="value-wrapper">
+                <span id="moistureValue" class="value">--</span>
+                <span class="unit">%</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div id="moistureBar" class="progress-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-card glass-panel" id="cardRaw">
+            <div class="metric-header">
+              <h3>Leitura ADC Bruta</h3>
+              <div class="icon-wrap raw-icon">
+                <i class="fa-solid fa-wave-square"></i>
+              </div>
+            </div>
+            <div class="metric-body">
+              <div class="value-wrapper">
+                <span id="rawValue" class="value">--</span>
+              </div>
+              <p class="subtitle">Valor captado do pino analógico</p>
+            </div>
+          </div>
+
+          <div class="metric-card glass-panel" id="cardTime">
+            <div class="metric-header">
+              <h3>Última Atualização</h3>
+              <div class="icon-wrap time-icon">
+                <i class="fa-solid fa-clock"></i>
+              </div>
+            </div>
+            <div class="metric-body">
+              <div class="value-wrapper">
+                <span id="timeValue" class="value small-val">--:--:--</span>
+              </div>
+              <p id="dateValue" class="subtitle">--/--/----</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-column">
+          <div class="chart-card glass-panel">
+            <div class="chart-header">
+              <div class="chart-title">
+                <h3>
+                  <i class="fa-solid fa-chart-line"></i> Histórico de Umidade do
+                  Solo
+                </h3>
+                <p>Últimas 50 leituras sincronizadas</p>
+              </div>
+              <button
+                class="btn-refresh"
+                id="btnRefresh"
+                title="Forçar Atualização"
+              >
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+            <div class="chart-container">
+              <canvas id="historyChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
