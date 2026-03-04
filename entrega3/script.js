@@ -1,125 +1,47 @@
-const API_URL = "https://building-blocks-v8gg.onrender.com/api/dados";
+// ── Config ──
+const API_URL = 'https://building-blocks-v8gg.onrender.com/api/dados';
+const POLL_INTERVAL = 10000; // 10s
 
-const moistureValueEl = document.getElementById("moistureValue");
-const rawValueEl = document.getElementById("rawValue");
-const timeValueEl = document.getElementById("timeValue");
-const dateValueEl = document.getElementById("dateValue");
-const deviceIdEl = document.getElementById("deviceId");
-const moistureBarEl = document.getElementById("moistureBar");
-const statusDot = document.getElementById("statusDot");
-const statusText = document.getElementById("statusText");
-const btnRefresh = document.getElementById("btnRefresh");
+// ── State ──
+let chart = null;
+let pollTimer = null;
 
-const ctx = document.getElementById("historyChart").getContext("2d");
-
-const gradientFill = ctx.createLinearGradient(0, 0, 0, 500);
-gradientFill.addColorStop(0, "rgba(16, 185, 129, 0.6)");
-gradientFill.addColorStop(1, "rgba(16, 185, 129, 0.0)");
-
-Chart.defaults.color = "#94a3b8";
-Chart.defaults.font.family = "Outfit";
-
-const historyChart = new Chart(ctx, {
-  type: "line",
-  data: {
-    labels: [],
-    datasets: [
-      {
-        label: "Umidade (%)",
-        data: [],
-        borderColor: "#10b981",
-        backgroundColor: gradientFill,
-        borderWidth: 3,
-        fill: true,
-        pointBackgroundColor: "#1e293b",
-        pointBorderColor: "#10b981",
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: "#10b981",
-        pointHoverBorderColor: "#fff",
-        pointHoverBorderWidth: 2,
-        tension: 0.4,
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    layout: {
-      padding: { top: 20 },
-    },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "rgba(15, 23, 42, 0.9)",
-        titleFont: { size: 14, weight: "600" },
-        bodyFont: { size: 14 },
-        padding: 12,
-        cornerRadius: 12,
-        displayColors: false,
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        borderWidth: 1,
-        callbacks: {
-          label: function (context) {
-            return `${context.parsed.y.toFixed(1)}%`;
-          },
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        grid: {
-          color: "rgba(255, 255, 255, 0.05)",
-          drawBorder: false,
-        },
-        ticks: {
-          padding: 10,
-          callback: (value) => value + "%",
-        },
-      },
-      x: {
-        grid: {
-          display: false,
-          drawBorder: false,
-        },
-        ticks: {
-          maxTicksLimit: 10,
-          maxRotation: 0,
-          padding: 10,
-        },
-      },
-    },
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
-  },
+// ── Bootstrap ──
+document.addEventListener('DOMContentLoaded', () => {
+  fetchData();
+  pollTimer = setInterval(fetchData, POLL_INTERVAL);
 });
 
-function processServerData(data) {
-  if (!data || !Array.isArray(data.items)) return [];
+// ── Fetch ──
+async function fetchData() {
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const readings = groupReadings(json.items);
+    render(readings);
+    setStatus(true);
+  } catch (err) {
+    console.error('Fetch error:', err);
+    setStatus(false);
+    showError(err.message);
+  }
+}
 
-  const items = data.items;
+// ── Group flat key/value items into reading objects ──
+// The ESP32 buildJson sends:
+//   soil_moisture_raw   → actually temperature (°C)
+//   soil_moisture_percent → actually humidity (%)
+function groupReadings(items) {
   const readings = [];
   let current = {};
 
   for (const item of items) {
-    if (item.key === "device_id" && Object.keys(current).length > 0) {
+    if (current.hasOwnProperty(item.key)) {
       readings.push({ ...current });
       current = {};
     }
-
-    let val = item.value;
-    if (item.key === "timestamp" || item.key === "soil_moisture_raw") {
-      val = parseInt(val, 10);
-    } else if (item.key === "soil_moisture_percent") {
-      val = parseFloat(val);
-    }
-
-    current[item.key] = val;
+    current[item.key] = item.value;
   }
 
   if (Object.keys(current).length > 0) {
@@ -129,113 +51,294 @@ function processServerData(data) {
   return readings;
 }
 
-function updateDashboard(readings) {
+// ── Render everything ──
+function render(readings) {
+  const root = document.getElementById('appRoot');
+
+  // First render: stamp template
+  if (!document.getElementById('metricTemp')) {
+    root.innerHTML = '';
+    const tpl = document.getElementById('dashboardTemplate');
+    root.appendChild(tpl.content.cloneNode(true));
+    createChart();
+  }
+
   if (readings.length === 0) return;
 
-  readings.sort((a, b) => a.timestamp - b.timestamp);
-  const chartReadings = readings.slice(-50);
-  const latest = chartReadings[chartReadings.length - 1];
+  const latest = readings[readings.length - 1];
+  // soil_moisture_raw = temperature, soil_moisture_percent = humidity
+  const temperature = parseFloat(latest.soil_moisture_raw ?? 0);
+  const humidity = parseFloat(latest.soil_moisture_percent ?? 0);
+  const deviceId = latest.device_id ?? '—';
 
-  if (latest.soil_moisture_percent === undefined) return;
+  // Metric cards
+  document.getElementById('metricTemp').innerHTML = `${temperature.toFixed(1)}<span class="unit">°C</span>`;
+  document.getElementById('metricHumidity').innerHTML = `${humidity.toFixed(1)}<span class="unit">%</span>`;
+  document.getElementById('metricDevice').textContent = deviceId;
+  document.getElementById('metricTotal').textContent = readings.length;
 
-  [moistureValueEl, rawValueEl, timeValueEl].forEach((el) => {
-    el.classList.remove("value-update-anim");
-    void el.offsetWidth;
-    el.classList.add("value-update-anim");
-  });
+  // Gauges
+  updateTempGauge(temperature);
+  updateHumGauge(humidity);
 
-  const percent = latest.soil_moisture_percent.toFixed(1);
-  moistureValueEl.textContent = percent;
-  moistureBarEl.style.width = `${percent}%`;
+  // Chart
+  updateChart(readings);
 
-  if (percent < 30) {
-    moistureBarEl.style.background = "linear-gradient(90deg, #f59e0b, #ef4444)";
-  } else if (percent > 80) {
-    moistureBarEl.style.background = "linear-gradient(90deg, #3b82f6, #0ea5e9)";
-  } else {
-    moistureBarEl.style.background =
-      "linear-gradient(90deg, #3b82f6, var(--accent-primary))";
-  }
-
-  rawValueEl.textContent = latest.soil_moisture_raw || "N/A";
-  deviceIdEl.textContent = latest.device_id || "Desconhecido";
-
-  let ts = latest.timestamp || 0;
-  if (ts.toString().length === 10) ts *= 1000;
-
-  let date;
-  if (ts < 31536000000) {
-    date = new Date();
-  } else {
-    date = new Date(ts);
-  }
-
-  timeValueEl.textContent = date.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  dateValueEl.textContent = date.toLocaleDateString("pt-BR");
-
-  const labels = [];
-  const _data = [];
-
-  chartReadings.forEach((item) => {
-    let its = item.timestamp || 0;
-    if (its.toString().length === 10) its *= 1000;
-
-    let idate = new Date();
-    if (its >= 31536000000) {
-      idate = new Date(its);
-    }
-    labels.push(
-      idate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-    );
-    _data.push(item.soil_moisture_percent);
-  });
-
-  historyChart.data.labels = labels;
-  historyChart.data.datasets[0].data = _data;
-  historyChart.update();
+  // Table
+  updateTable(readings);
 }
 
-let isFetching = false;
+// ── Chart.js (dual axis: temperature + humidity) ──
+function createChart() {
+  const ctx = document.getElementById('sensorChart').getContext('2d');
 
-async function fetchSensorData() {
-  if (isFetching) return;
-  isFetching = true;
+  const tempGradient = ctx.createLinearGradient(0, 0, 0, 280);
+  tempGradient.addColorStop(0, 'rgba(248, 113, 113, 0.25)');
+  tempGradient.addColorStop(1, 'rgba(248, 113, 113, 0.0)');
 
-  btnRefresh.classList.add("spinning");
-  statusDot.className = "status-dot updating";
-  statusText.textContent = "Atualizando...";
+  const humGradient = ctx.createLinearGradient(0, 0, 0, 280);
+  humGradient.addColorStop(0, 'rgba(56, 189, 248, 0.20)');
+  humGradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
 
-  try {
-    const response = await fetch(API_URL);
-    if (!response.ok) throw new Error("API Error");
-
-    const data = await response.json();
-    const readings = processServerData(data);
-
-    updateDashboard(readings);
-
-    statusDot.className = "status-dot online";
-    statusText.textContent = "Online";
-  } catch (error) {
-    console.error("Fetch falhou:", error);
-    statusDot.className = "status-dot";
-    statusText.textContent = "Offline";
-  } finally {
-    setTimeout(() => {
-      btnRefresh.classList.remove("spinning");
-      if (statusDot.classList.contains("updating")) {
-        statusDot.className = "status-dot";
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Temperatura (°C)',
+          data: [],
+          borderColor: '#f87171',
+          backgroundColor: tempGradient,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#f87171',
+          pointBorderColor: '#0a0e1a',
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.4,
+          yAxisID: 'yTemp',
+        },
+        {
+          label: 'Umidade (%)',
+          data: [],
+          borderColor: '#38bdf8',
+          backgroundColor: humGradient,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#38bdf8',
+          pointBorderColor: '#0a0e1a',
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.4,
+          yAxisID: 'yHum',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: '#94a3b8',
+            font: { size: 12, family: 'Inter' },
+            usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 20,
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(17, 24, 39, 0.95)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#94a3b8',
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8,
+          callbacks: {
+            title: (items) => `Leitura #${items[0].dataIndex + 1}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+          ticks: { color: '#64748b', font: { size: 11 } },
+        },
+        yTemp: {
+          type: 'linear',
+          position: 'left',
+          min: 0,
+          max: 50,
+          grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+          ticks: {
+            color: '#f87171',
+            font: { size: 11 },
+            callback: (v) => v + '°C',
+          },
+          title: { display: true, text: 'Temperatura', color: '#f87171', font: { size: 12 } }
+        },
+        yHum: {
+          type: 'linear',
+          position: 'right',
+          min: 0,
+          max: 100,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            color: '#38bdf8',
+            font: { size: 11 },
+            callback: (v) => v + '%',
+          },
+          title: { display: true, text: 'Umidade', color: '#38bdf8', font: { size: 12 } }
+        }
       }
-    }, 500);
-    isFetching = false;
+    }
+  });
+}
+
+function updateChart(readings) {
+  if (!chart) return;
+
+  const labels = readings.map((_, i) => `#${i + 1}`);
+  const temps = readings.map(r => parseFloat(r.soil_moisture_raw ?? 0));
+  const hums = readings.map(r => parseFloat(r.soil_moisture_percent ?? 0));
+
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = temps;
+  chart.data.datasets[1].data = hums;
+  chart.update('none');
+}
+
+// ── Temp Gauge (0–50°C) ──
+function updateTempGauge(temp) {
+  const maxTemp = 50;
+  const pct = Math.min(Math.max(temp / maxTemp, 0), 1);
+  const circumference = 235.6;
+  const offset = circumference - (circumference * pct);
+
+  const fill = document.getElementById('gaugeFillTemp');
+  const text = document.getElementById('gaugeValueTemp');
+  const status = document.getElementById('gaugeStatusTemp');
+
+  fill.style.strokeDashoffset = offset;
+  text.textContent = temp.toFixed(1);
+
+  if (temp <= 25) {
+    status.textContent = '🌿 Agradável';
+    status.className = 'gauge-status good';
+  } else if (temp <= 35) {
+    status.textContent = '⚠️ Quente';
+    status.className = 'gauge-status warning';
+  } else {
+    status.textContent = '🔴 Muito Quente';
+    status.className = 'gauge-status critical';
   }
 }
 
-btnRefresh.addEventListener("click", fetchSensorData);
+// ── Humidity Gauge (0–100%) ──
+function updateHumGauge(hum) {
+  const pct = Math.min(Math.max(hum / 100, 0), 1);
+  const circumference = 235.6;
+  const offset = circumference - (circumference * pct);
 
-fetchSensorData();
-setInterval(fetchSensorData, 10000);
+  const fill = document.getElementById('gaugeFillHum');
+  const text = document.getElementById('gaugeValueHum');
+  const status = document.getElementById('gaugeStatusHum');
+
+  fill.style.strokeDashoffset = offset;
+  text.textContent = hum.toFixed(1);
+
+  if (hum >= 40 && hum <= 70) {
+    status.textContent = '💧 Ideal';
+    status.className = 'gauge-status good';
+  } else if (hum >= 25 && hum <= 80) {
+    status.textContent = '⚠️ Atenção';
+    status.className = 'gauge-status warning';
+  } else {
+    status.textContent = '🔴 Fora do Ideal';
+    status.className = 'gauge-status critical';
+  }
+}
+
+// ── Table ──
+function updateTable(readings) {
+  const tbody = document.getElementById('readingsTableBody');
+  const badge = document.getElementById('tableBadge');
+  badge.textContent = `${readings.length} registros`;
+
+  const recent = readings.slice(-20).reverse();
+
+  tbody.innerHTML = recent.map(r => {
+    const temp = parseFloat(r.soil_moisture_raw ?? 0);
+    const hum = parseFloat(r.soil_moisture_percent ?? 0);
+    const device = r.device_id ?? '—';
+    const ts = r.timestamp ?? '—';
+
+    let statusClass = 'good';
+    let statusLabel = 'Normal';
+    if (temp > 35) { statusClass = 'critical'; statusLabel = 'Quente'; }
+    else if (temp > 25) { statusClass = 'warning'; statusLabel = 'Morno'; }
+
+    return `
+      <tr>
+        <td>${device}</td>
+        <td>${ts}</td>
+        <td>
+          <div class="td-moisture">
+            <div class="moisture-bar-bg">
+              <div class="moisture-bar-fill temp-bar" style="width:${Math.min(temp / 50 * 100, 100)}%"></div>
+            </div>
+            ${temp.toFixed(1)}°C
+          </div>
+        </td>
+        <td>
+          <div class="td-moisture">
+            <div class="moisture-bar-bg">
+              <div class="moisture-bar-fill" style="width:${hum}%"></div>
+            </div>
+            ${hum.toFixed(1)}%
+          </div>
+        </td>
+        <td><span class="badge ${statusClass}">● ${statusLabel}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ── Status indicator ──
+function setStatus(online) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+
+  if (online) {
+    dot.classList.remove('offline');
+    text.textContent = 'API Conectada';
+  } else {
+    dot.classList.add('offline');
+    text.textContent = 'Sem conexão';
+  }
+}
+
+// ── Error state ──
+function showError(message) {
+  const root = document.getElementById('appRoot');
+  if (document.getElementById('metricTemp')) return;
+
+  root.innerHTML = `
+    <div class="error-container">
+      <div class="error-icon">⚠️</div>
+      <div class="error-title">Erro ao conectar na API</div>
+      <div class="error-message">
+        Certifique-se de que o servidor está rodando em <strong>${API_URL}</strong>
+        <br/><br/><code>${message}</code>
+      </div>
+      <button class="btn-retry" onclick="fetchData()">Tentar novamente</button>
+    </div>
+  `;
+}

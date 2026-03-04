@@ -1,122 +1,178 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Monitor de Umidade do Solo</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <div class="background-orbs">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-      <div class="orb orb-3"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Dashboard IoT para monitoramento de temperatura e umidade com ESP32 e DHT22" />
+  <title>SoilWatch — Dashboard IoT</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="#">
+        <div class="logo-icon">🌱</div>
+        <span class="logo-text">SoilWatch</span>
+      </a>
+      <div class="header-status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Conectando...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main" id="appRoot">
+
+    <!-- Loading state -->
+    <div class="loading-container" id="loadingState">
+      <div class="spinner"></div>
+      <span class="loading-text">Carregando dados dos sensores...</span>
     </div>
 
-    <div class="dashboard">
-      <header class="header glass-panel">
-        <div class="header-info">
-          <h1><i class="fa-solid fa-seedling"></i> Monitor de Umidade</h1>
-          <p>Monitoramento dinâmico em tempo real de sensores IoT</p>
+  </main>
+
+  <!-- Dashboard template (hidden, cloned by JS) -->
+  <template id="dashboardTemplate">
+    <div>
+      <!-- Metric Cards -->
+      <p class="section-title">Visão Geral</p>
+      <div class="metrics-grid">
+        <div class="metric-card temperature animate-in">
+          <div class="metric-header">
+            <span class="metric-label">Temperatura</span>
+            <div class="metric-icon red">🌡️</div>
+          </div>
+          <div class="metric-value" id="metricTemp">—<span class="unit">°C</span></div>
+          <div class="metric-sub">Última leitura DHT22</div>
         </div>
-        <div class="device-status">
-          <div class="device-badge">
-            <i class="fa-solid fa-microchip"></i>
-            <span id="deviceId">Carregando...</span>
+        <div class="metric-card humidity animate-in">
+          <div class="metric-header">
+            <span class="metric-label">Umidade do Ar</span>
+            <div class="metric-icon blue">💧</div>
           </div>
-          <div class="connection-pill">
-            <div id="statusDot" class="status-dot"></div>
-            <span id="statusText">Conectando...</span>
-          </div>
+          <div class="metric-value" id="metricHumidity">—<span class="unit">%</span></div>
+          <div class="metric-sub">Última leitura DHT22</div>
         </div>
-      </header>
-
-      <main class="grid-layout">
-        <div class="values-column">
-          <div class="metric-card glass-panel" id="cardMoisture">
-            <div class="metric-header">
-              <h3>Umidade Relativa</h3>
-              <div class="icon-wrap percent-icon">
-                <i class="fa-solid fa-droplet"></i>
-              </div>
-            </div>
-            <div class="metric-body">
-              <div class="value-wrapper">
-                <span id="moistureValue" class="value">--</span>
-                <span class="unit">%</span>
-              </div>
-              <div class="progress-bar-bg">
-                <div id="moistureBar" class="progress-bar-fill"></div>
-              </div>
-            </div>
+        <div class="metric-card device animate-in">
+          <div class="metric-header">
+            <span class="metric-label">Dispositivo</span>
+            <div class="metric-icon amber">📟</div>
           </div>
-
-          <div class="metric-card glass-panel" id="cardRaw">
-            <div class="metric-header">
-              <h3>Leitura ADC Bruta</h3>
-              <div class="icon-wrap raw-icon">
-                <i class="fa-solid fa-wave-square"></i>
-              </div>
-            </div>
-            <div class="metric-body">
-              <div class="value-wrapper">
-                <span id="rawValue" class="value">--</span>
-              </div>
-              <p class="subtitle">Valor captado do pino analógico</p>
-            </div>
+          <div class="metric-value" id="metricDevice" style="font-size:1.1rem;">—</div>
+          <div class="metric-sub">Identificação</div>
+        </div>
+        <div class="metric-card readings animate-in">
+          <div class="metric-header">
+            <span class="metric-label">Total de Leituras</span>
+            <div class="metric-icon purple">📊</div>
           </div>
+          <div class="metric-value" id="metricTotal">—</div>
+          <div class="metric-sub">Registros no banco</div>
+        </div>
+      </div>
 
-          <div class="metric-card glass-panel" id="cardTime">
-            <div class="metric-header">
-              <h3>Última Atualização</h3>
-              <div class="icon-wrap time-icon">
-                <i class="fa-solid fa-clock"></i>
-              </div>
-            </div>
-            <div class="metric-body">
-              <div class="value-wrapper">
-                <span id="timeValue" class="value small-val">--:--:--</span>
-              </div>
-              <p id="dateValue" class="subtitle">--/--/----</p>
-            </div>
+      <!-- Charts -->
+      <p class="section-title">Monitoramento</p>
+      <div class="chart-section three-col">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Temperatura & Umidade ao Longo do Tempo</span>
+            <span class="card-badge">Histórico</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="sensorChart"></canvas>
           </div>
         </div>
-
-        <div class="chart-column">
-          <div class="chart-card glass-panel">
-            <div class="chart-header">
-              <div class="chart-title">
-                <h3>
-                  <i class="fa-solid fa-chart-line"></i> Histórico de Umidade do
-                  Solo
-                </h3>
-                <p>Últimas 50 leituras sincronizadas</p>
-              </div>
-              <button
-                class="btn-refresh"
-                id="btnRefresh"
-                title="Forçar Atualização"
-              >
-                <i class="fa-solid fa-rotate-right"></i>
-              </button>
-            </div>
-            <div class="chart-container">
-              <canvas id="historyChart"></canvas>
-            </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Temperatura</span>
+            <span class="card-badge badge-red">Tempo Real</span>
+          </div>
+          <div class="gauge-wrapper">
+            <svg class="gauge-svg" viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="gaugeGradientTemp" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#38bdf8" />
+                  <stop offset="50%" stop-color="#fbbf24" />
+                  <stop offset="100%" stop-color="#f87171" />
+                </linearGradient>
+              </defs>
+              <circle class="gauge-bg" cx="60" cy="60" r="50"
+                stroke-dasharray="235.6" stroke-dashoffset="0"
+                transform="rotate(-90 60 60)" />
+              <circle class="gauge-fill gauge-fill-temp" cx="60" cy="60" r="50"
+                id="gaugeFillTemp"
+                stroke-dasharray="235.6" stroke-dashoffset="235.6"
+                transform="rotate(-90 60 60)" />
+              <text class="gauge-text" x="60" y="56" id="gaugeValueTemp">—</text>
+              <text class="gauge-label-text" x="60" y="74">°C</text>
+            </svg>
+            <div class="gauge-status good" id="gaugeStatusTemp">Carregando...</div>
           </div>
         </div>
-      </main>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Umidade</span>
+            <span class="card-badge">Tempo Real</span>
+          </div>
+          <div class="gauge-wrapper">
+            <svg class="gauge-svg" viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="gaugeGradientHum" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#818cf8" />
+                  <stop offset="50%" stop-color="#22d3ee" />
+                  <stop offset="100%" stop-color="#38bdf8" />
+                </linearGradient>
+              </defs>
+              <circle class="gauge-bg" cx="60" cy="60" r="50"
+                stroke-dasharray="235.6" stroke-dashoffset="0"
+                transform="rotate(-90 60 60)" />
+              <circle class="gauge-fill gauge-fill-hum" cx="60" cy="60" r="50"
+                id="gaugeFillHum"
+                stroke-dasharray="235.6" stroke-dashoffset="235.6"
+                transform="rotate(-90 60 60)" />
+              <text class="gauge-text" x="60" y="56" id="gaugeValueHum">—</text>
+              <text class="gauge-label-text" x="60" y="74">%</text>
+            </svg>
+            <div class="gauge-status good" id="gaugeStatusHum">Carregando...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <p class="section-title">Leituras Recentes</p>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Histórico de Dados</span>
+          <span class="card-badge" id="tableBadge">0 registros</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Dispositivo</th>
+                <th>Timestamp</th>
+                <th>Temperatura (°C)</th>
+                <th>Umidade (%)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="readingsTableBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+  </template>
 
-    <script src="script.js"></script>
-  </body>
+  <footer class="footer">
+    SoilWatch IoT Dashboard &bull; Equipe Kao &bull; UNIMAR 2026
+  </footer>
+
+  <script src="script.js"></script>
+</body>
 </html>
