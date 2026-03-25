@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "author": "JOAO PEDRO FUSCO",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -66.9, "left": 196.2, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "dht1:VCC", "esp:3V3", "red", [ "v48", "h-67.2", "v-115.2", "h-9.6" ] ],
+    [ "dht1:SDA", "esp:4", "green", [ "v96", "h0.1" ] ],
+    [ "dht1:GND", "esp:GND.2", "black", [ "v76.8", "h-115.2", "v-96", "h-9.6" ] ]
+  ],
+  "dependencies": {}
+}

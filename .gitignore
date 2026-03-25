@@ -4,3 +4,6 @@
 **/*.sqlite
 **/*.sqlite3
 **/*.env
+**/*.envrc
+**/.direnv
+**/secrets.py
